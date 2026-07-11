@@ -66,8 +66,11 @@ function ont_monitor_request($url, $settings, $options = []) {
 }
 
 function ont_monitor_js_value($body, $name) {
-	$pattern = '/var\\s+' . preg_quote($name, '/') . '\\s*=\\s*"([^"]*)";/' ;
-	return preg_match($pattern, $body, $matches) === 1 ? html_entity_decode($matches[1], ENT_QUOTES | ENT_HTML5, 'UTF-8') : null;
+	$pattern = '/(?:var\\s+)?' . preg_quote($name, '/') . '\\s*=\\s*"([^"]*)";/';
+	if (preg_match_all($pattern, $body, $matches) !== false && !empty($matches[1])) {
+		return html_entity_decode(end($matches[1]), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+	}
+	return null;
 }
 
 function ont_monitor_format_number($value, $precision = 2) {
