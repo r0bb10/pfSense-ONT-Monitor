@@ -1,0 +1,8 @@
+/etc/inc/priv/ont_monitor.priv.inc
+pkg/ont-monitor.inc
+pkg/ont-monitor.xml
+%%DATADIR%%/info.xml
+www/status_ont_monitor.php
+www/widgets/widgets/ont_monitor.widget.php
+@dir /etc/inc/priv
+@dir /etc/inc

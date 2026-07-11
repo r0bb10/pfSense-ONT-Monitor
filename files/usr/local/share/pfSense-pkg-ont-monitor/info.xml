@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<pfsensepkgs>
+	<package>
+		<name>ONT Monitor</name>
+		<internal_name>ont-monitor</internal_name>
+		<descr><![CDATA[Dashboard widget and status page for ZTE F6005 ONT metrics.]]></descr>
+		<pkginfolink>https://github.com/r0bb10/pfSense-ONT-Monitor</pkginfolink>
+		<version>%%PKGVERSION%%</version>
+		<configurationfile>ont-monitor.xml</configurationfile>
+	</package>
+</pfsensepkgs>

@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE packagegui SYSTEM "../schema/packages.dtd">
+<?xml-stylesheet type="text/xsl" href="../xsl/package.xsl"?>
+<packagegui>
+	<name>ont-monitor</name>
+	<version>%%PKGVERSION%%</version>
+	<title>Services: ONT Monitor</title>
+	<addedit_string>ONT Monitor: changed settings</addedit_string>
+	<include_file>/usr/local/pkg/ont-monitor.inc</include_file>
+	<configpath>installedpackages->ontmonitor->config</configpath>
+	<aftersaveredirect>/pkg_edit.php?xml=ont-monitor.xml</aftersaveredirect>
+	<menu>
+		<name>ONT Monitor</name>
+		<section>Services</section>
+		<configfile>ont-monitor.xml</configfile>
+		<url>/pkg_edit.php?xml=ont-monitor.xml</url>
+	</menu>
+	<menu>
+		<name>ONT Monitor</name>
+		<section>Status</section>
+		<configfile>ont-monitor.xml</configfile>
+		<url>/status_ont_monitor.php</url>
+	</menu>
+	<tabs>
+		<tab>
+			<text>Settings</text>
+			<url>/pkg_edit.php?xml=ont-monitor.xml</url>
+			<active/>
+		</tab>
+		<tab>
+			<text>Status</text>
+			<url>/status_ont_monitor.php</url>
+		</tab>
+	</tabs>
+	<fields>
+		<field>
+			<name>Connection</name>
+			<type>listtopic</type>
+		</field>
+		<field>
+			<fielddescr>ONT IPv4 address</fielddescr>
+			<fieldname>host</fieldname>
+			<description>The management address of the ONT.</description>
+			<type>input</type>
+			<size>20</size>
+			<default_value>192.168.1.1</default_value>
+		</field>
+		<field>
+			<fielddescr>pfSense source address</fielddescr>
+			<fieldname>source_address</fieldname>
+			<description>Address bound to ONT requests. Configure this address on the ONT management interface.</description>
+			<type>input</type>
+			<size>20</size>
+			<default_value>192.168.1.2</default_value>
+		</field>
+		<field>
+			<fielddescr>Username</fielddescr>
+			<fieldname>username</fieldname>
+			<type>input</type>
+			<size>20</size>
+			<default_value>admin</default_value>
+		</field>
+		<field>
+			<fielddescr>Password</fielddescr>
+			<fieldname>password</fieldname>
+			<description>Stored in the protected pfSense configuration. The stock F6005 default is admin.</description>
+			<type>password</type>
+			<size>20</size>
+			<default_value>admin</default_value>
+		</field>
+		<field>
+			<fielddescr>Refresh interval</fielddescr>
+			<fieldname>refresh_seconds</fieldname>
+			<description>Dashboard refresh interval in seconds. Values below 30 are clamped to 30.</description>
+			<type>input</type>
+			<size>6</size>
+			<default_value>60</default_value>
+		</field>
+	</fields>
+	<custom_php_install_command>ont_monitor_install();</custom_php_install_command>
+	<custom_php_deinstall_command>ont_monitor_deinstall();</custom_php_deinstall_command>
+</packagegui>

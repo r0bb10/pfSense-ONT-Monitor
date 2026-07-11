@@ -1,0 +1,86 @@
+name: Build and release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Shell lint
+        run: shellcheck build.sh files/pkg-install.in files/pkg-deinstall.in
+      - name: PHP lint
+        run: find files -type f \( -name '*.php' -o -name '*.inc' \) -print0 | xargs -0 -n1 php -l
+      - name: XML parse
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import xml.etree.ElementTree as ET
+          for path in pathlib.Path('files').rglob('*.xml'):
+              ET.parse(path)
+              print(path)
+          PY
+
+  package:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build package on FreeBSD 15
+        uses: vmactions/freebsd-vm@v1.4.8
+        with:
+          release: '15.0'
+          usesh: true
+          prepare: |
+            export ASSUME_ALWAYS_YES=yes
+            pkg bootstrap -f
+          run: |
+            set -eux
+            chmod +x build.sh
+            PORTVERSION="${GITHUB_REF_NAME#v}" ./build.sh package
+            sha256 build/pkg/*.pkg > SHA256SUMS
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pfSense-pkg-ont-monitor
+          path: |
+            build/pkg/pfSense-pkg-ont-monitor-*.pkg
+            SHA256SUMS
+
+  release:
+    needs: [lint, package]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: pfSense-pkg-ont-monitor
+          path: release
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          package=$(find release -type f -name 'pfSense-pkg-ont-monitor-*.pkg' -print -quit)
+          checksum=$(find release -type f -name 'SHA256SUMS' -print -quit)
+          test -n "$package"
+          test -n "$checksum"
+          filename=$(basename "$package")
+          cat > release-notes.md <<EOF
+          ## Install
+
+          \`\`\`sh
+          fetch -o /tmp/${filename} ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/${filename}
+          /usr/local/sbin/pkg-static add -f /tmp/${filename}
+          \`\`\`
+          EOF
+          gh release create "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" \
+            --title "ONT Monitor ${GITHUB_REF_NAME#v}" \
+            --generate-notes \
+            --notes-file release-notes.md \
+            "$package" \
+            "$checksum"
