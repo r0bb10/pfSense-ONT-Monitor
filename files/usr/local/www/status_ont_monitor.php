@@ -20,12 +20,21 @@ include('head.inc');
 	<li class="active"><a href="/status_ont_monitor.php"><?=gettext('Status')?></a></li>
 </ul>
 
+<style>
+.ont-monitor-table {
+	table-layout: fixed;
+}
+.ont-monitor-table th {
+	width: 35%;
+}
+</style>
+
 <div id="ont-monitor-error" class="alert alert-danger" style="display: none;"></div>
 
 <div class="panel panel-default">
 	<div class="panel-heading"><h2 class="panel-title"><?=gettext('GPON')?></h2></div>
 	<div class="panel-body">
-		<table class="table table-striped table-condensed">
+		<table class="table table-striped table-condensed ont-monitor-table">
 			<tbody>
 				<tr><th><?=gettext('State')?></th><td id="ont-gpon-state">-</td></tr>
 				<tr><th><?=gettext('Optical receive')?></th><td id="ont-rx-power">-</td></tr>
@@ -41,7 +50,7 @@ include('head.inc');
 <div class="panel panel-default">
 	<div class="panel-heading"><h2 class="panel-title"><?=gettext('Device')?></h2></div>
 	<div class="panel-body">
-		<table class="table table-striped table-condensed">
+		<table class="table table-striped table-condensed ont-monitor-table">
 			<tbody>
 				<tr><th><?=gettext('Model')?></th><td id="ont-model">-</td></tr>
 				<tr><th><?=gettext('Hardware')?></th><td id="ont-hardware">-</td></tr>
@@ -56,7 +65,7 @@ include('head.inc');
 <div class="panel panel-default">
 	<div class="panel-heading"><h2 class="panel-title"><?=gettext('Ethernet')?></h2></div>
 	<div class="panel-body">
-		<table class="table table-striped table-condensed">
+		<table class="table table-striped table-condensed ont-monitor-table">
 			<tbody>
 				<tr><th><?=gettext('Status')?></th><td id="ont-ethernet-status">-</td></tr>
 				<tr><th><?=gettext('MAC address')?></th><td id="ont-ethernet-mac">-</td></tr>

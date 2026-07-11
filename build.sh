@@ -3,7 +3,6 @@
 set -eu
 
 PORTNAME="pfSense-pkg-ont-monitor"
-PORTVERSION="${PORTVERSION:-0.1.1}"
 ABI="FreeBSD:15:amd64"
 PREFIX="/usr/local"
 ROOT=$(cd -- "$(dirname -- "$0")" && pwd)
@@ -11,6 +10,7 @@ FILES="${ROOT}/files"
 BUILD="${ROOT}/build"
 STAGE="${BUILD}/stage"
 OUTPUT="${BUILD}/pkg"
+PORTVERSION="${PORTVERSION:?Set PORTVERSION from the release tag without its v prefix}"
 
 clean() {
 	rm -rf "${BUILD}"

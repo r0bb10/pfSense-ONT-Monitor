@@ -19,46 +19,65 @@ if (!isset($widgetkey)) {
 	exit;
 }
 
-function ont_monitor_widget_rows() {
+function ont_monitor_widget_value($value) {
+	return $value === null || $value === '' ? '-' : ont_monitor_escape($value);
+}
+
+function ont_monitor_widget_gpon_icon($severity) {
+	$icons = [
+		'warning' => 'fa-arrow-right text-warning',
+		'success' => 'fa-arrow-up text-success',
+		'danger' => 'fa-arrow-down text-danger',
+	];
+	return $icons[$severity] ?? $icons['danger'];
+}
+
+function ont_monitor_widget_ethernet_value($status) {
+	$value = ont_monitor_widget_value($status);
+	if ($value === 'Down') {
+		return 'Down<br>&nbsp;';
+	}
+	return str_replace(' &lt;', '<br>&lt;', $value);
+}
+
+function ont_monitor_widget_content() {
 	$data = ont_monitor_fetch();
 	if (isset($data['error'])) {
-		return '<tr><td><span class="text-danger">' . ont_monitor_escape($data['error']) . '</span></td></tr>';
+		return '<tr><td colspan="4" class="text-center text-danger">' . ont_monitor_escape($data['error']) . '</td></tr>';
 	}
 
-	$rows = [
-		[gettext('GPON state'), $data['gpon']['state']],
-		[gettext('Optical receive'), $data['gpon']['rx_power_dbm'] . ' dBm'],
-		[gettext('Optical transmit'), $data['gpon']['tx_power_dbm'] . ' dBm'],
-		[gettext('Module temperature'), $data['gpon']['temperature_c'] . ' C'],
-		[gettext('Module voltage'), $data['gpon']['voltage_v'] . ' V'],
-		[gettext('Laser bias'), $data['gpon']['bias_ma'] . ' mA'],
-		[gettext('Ethernet'), $data['ethernet']['status']],
-		[gettext('Ethernet errors'), $data['ethernet']['rx_errors'] . ' RX / ' . $data['ethernet']['tx_errors'] . ' TX'],
-	];
+	$rx_errors = $data['ethernet']['rx_errors'];
+	$tx_errors = $data['ethernet']['tx_errors'];
+	$has_errors = (is_numeric($rx_errors) && (int)$rx_errors > 0) || (is_numeric($tx_errors) && (int)$tx_errors > 0);
+	$error_class = $has_errors ? ' text-danger' : '';
 
-	$html = '';
-	foreach ($rows as [$label, $value]) {
-		$html .= '<tr><th>' . ont_monitor_escape($label) . '</th><td>' . ont_monitor_escape($value ?? '-') . '</td></tr>';
-	}
-	return $html;
+	return '<tr>'
+		. '<td colspan="2" class="text-center"><strong>' . gettext('Model:') . '</strong> ZTE F6005</td>'
+		. '<td colspan="2" class="text-center"><strong>' . gettext('Software:') . '</strong> ' . ont_monitor_widget_value($data['device']['software']) . '</td>'
+		. '</tr><tr>'
+		. '<th class="text-center">' . gettext('GPON') . '</th><th class="text-center">' . gettext('Optics') . '</th><th class="text-center">' . gettext('Ethernet') . '</th><th class="text-center">' . gettext('Errors') . '</th>'
+		. '</tr><tr>'
+		. '<td class="text-center"><i class="fa ' . ont_monitor_widget_gpon_icon($data['gpon']['state_severity']) . '" aria-hidden="true"></i> '
+		. ont_monitor_widget_value($data['gpon']['state']) . '<br>' . ont_monitor_widget_value($data['gpon']['state_label']) . '</td>'
+		. '<td class="text-center"><strong>RX</strong> ' . ont_monitor_widget_value($data['gpon']['rx_power_dbm']) . ' dBm<br><strong>TX</strong> ' . ont_monitor_widget_value($data['gpon']['tx_power_dbm']) . ' dBm</td>'
+		. '<td class="text-center">' . ont_monitor_widget_ethernet_value($data['ethernet']['status']) . '</td>'
+		. '<td class="text-center' . $error_class . '"><strong>RX</strong> ' . ont_monitor_widget_value($rx_errors) . '<br><strong>TX</strong> ' . ont_monitor_widget_value($tx_errors) . '</td>'
+		. '</tr>';
 }
 
 if (isset($_POST['ajax'])) {
-	print ont_monitor_widget_rows();
+	print ont_monitor_widget_content();
 	exit;
 }
 
 $settings = ont_monitor_settings();
 ?>
 <div class="table-responsive">
-	<table class="table table-striped table-hover table-condensed">
+	<table class="table table-striped table-hover table-condensed" style="table-layout: fixed;">
 		<tbody id="<?=ont_monitor_escape($widgetkey)?>">
-			<?=ont_monitor_widget_rows()?>
+			<?=ont_monitor_widget_content()?>
 		</tbody>
 	</table>
-</div>
-<div class="text-right">
-	<a href="/status_ont_monitor.php"><?=gettext('Full status')?></a>
 </div>
 
 <script type="text/javascript">

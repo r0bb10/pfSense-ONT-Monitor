@@ -77,6 +77,39 @@ function ont_monitor_format_number($value, $precision = 2) {
 	return number_format((float)$value, $precision, '.', '');
 }
 
+function ont_monitor_gpon_state($state) {
+	$states = [
+		'1' => ['code' => 'O1', 'label' => 'Initial state', 'severity' => 'warning'],
+		'2' => ['code' => 'O2', 'label' => 'Standby state', 'severity' => 'warning'],
+		'3' => ['code' => 'O3', 'label' => 'Serial Number state', 'severity' => 'warning'],
+		'4' => ['code' => 'O4', 'label' => 'Ranging state', 'severity' => 'warning'],
+		'5' => ['code' => 'O5', 'label' => 'Operational', 'severity' => 'success'],
+		'6' => ['code' => 'O6', 'label' => 'POPUP state', 'severity' => 'danger'],
+		'7' => ['code' => 'O7', 'label' => 'Emergency Stop state', 'severity' => 'danger'],
+	];
+
+	return $states[(string)$state] ?? ['code' => null, 'label' => 'Unknown state', 'severity' => 'danger'];
+}
+
+function ont_monitor_ethernet_status($link_up, $link_mode) {
+	if ($link_up !== '1') {
+		return 'Down';
+	}
+
+	$link_modes = [
+		1 => '10base-T <full-duplex>',
+		2 => '100base-T <full-duplex>',
+		3 => '1000base-T <full-duplex>',
+		6 => '2.5Gbase-T <full-duplex>',
+		17 => '10base-T <half-duplex>',
+		18 => '100base-T <half-duplex>',
+		19 => '1000base-T <half-duplex>',
+		21 => '2.5Gbase-T <half-duplex>',
+	];
+
+	return $link_modes[(int)$link_mode] ?? 'Up';
+}
+
 function ont_monitor_fetch() {
 	if (!function_exists('curl_init')) {
 		return ['error' => 'PHP cURL support is unavailable.'];
@@ -148,16 +181,7 @@ function ont_monitor_fetch() {
 	$temperature_raw = ont_monitor_js_value($pages['gponinfo'], 'temperature');
 	$link_up = ont_monitor_js_value($pages['userinfo'], 'linkUp');
 	$link_mode = ont_monitor_js_value($pages['userinfo'], 'mode');
-	$link_modes = [
-		1 => '10 Mbps full duplex',
-		2 => '100 Mbps full duplex',
-		3 => '1 Gbps full duplex',
-		6 => '2.5 Gbps full duplex',
-		17 => '10 Mbps half duplex',
-		18 => '100 Mbps half duplex',
-		19 => '1 Gbps half duplex',
-		21 => '2.5 Gbps half duplex',
-	];
+	$gpon = ont_monitor_gpon_state($gpon_state);
 
 	return [
 		'updated' => date('c'),
@@ -169,7 +193,9 @@ function ont_monitor_fetch() {
 			'pon_serial' => ont_monitor_js_value($pages['devinfo'], 'PonSerialNum'),
 		],
 		'gpon' => [
-			'state' => $gpon_state === null ? null : 'O' . $gpon_state,
+			'state' => $gpon['code'],
+			'state_label' => $gpon['label'],
+			'state_severity' => $gpon['severity'],
 			'rx_power_dbm' => is_numeric($rx_raw) ? ont_monitor_format_number(((float)$rx_raw / 500) - 40) : null,
 			'tx_power_dbm' => is_numeric($tx_raw) ? ont_monitor_format_number(((float)$tx_raw / 500) - 30) : null,
 			'voltage_v' => is_numeric($voltage_raw) ? ont_monitor_format_number((float)$voltage_raw / 50) : null,
@@ -178,7 +204,7 @@ function ont_monitor_fetch() {
 		],
 		'ethernet' => [
 			'mac' => ont_monitor_js_value($pages['userinfo'], 'Mac'),
-			'status' => $link_up === '1' ? ($link_modes[(int)$link_mode] ?? 'Up') : 'Down',
+			'status' => ont_monitor_ethernet_status($link_up, $link_mode),
 			'rx_errors' => ont_monitor_js_value($pages['userinfo'], 'rxErrs'),
 			'tx_errors' => ont_monitor_js_value($pages['userinfo'], 'txErrs'),
 		],
