@@ -11,6 +11,10 @@ const ONT_MONITOR_DEFAULTS = [
 	'refresh_seconds' => '60',
 ];
 
+const ONT_MONITOR_RUNTIME_STATE_FILE = '/var/db/ont-monitor/state.json';
+const ONT_MONITOR_FETCH_ERROR_LOG_INTERVAL = 300;
+const ONT_MONITOR_ERROR_COUNTER_LOG_INTERVAL = 300;
+
 function ont_monitor_install() {
 	if (!config_get_path('installedpackages/ontmonitor/config/0')) {
 		config_set_path('installedpackages/ontmonitor/config/0', ONT_MONITOR_DEFAULTS);
@@ -77,6 +81,111 @@ function ont_monitor_format_number($value, $precision = 2) {
 	return number_format((float)$value, $precision, '.', '');
 }
 
+function ont_monitor_runtime_state() {
+	if (!is_readable(ONT_MONITOR_RUNTIME_STATE_FILE)) {
+		return [];
+	}
+
+	$state = json_decode((string)file_get_contents(ONT_MONITOR_RUNTIME_STATE_FILE), true);
+	return is_array($state) ? $state : [];
+}
+
+function ont_monitor_save_runtime_state($state) {
+	$directory = dirname(ONT_MONITOR_RUNTIME_STATE_FILE);
+	if (!is_dir($directory) && !mkdir($directory, 0700, true)) {
+		return;
+	}
+
+	file_put_contents(ONT_MONITOR_RUNTIME_STATE_FILE, json_encode($state), LOCK_EX);
+}
+
+function ont_monitor_log($message, $priority = LOG_NOTICE) {
+	syslog($priority, 'ONT Monitor: ' . $message);
+}
+
+function ont_monitor_value($value) {
+	return $value === null || $value === '' ? '-' : (string)$value;
+}
+
+function ont_monitor_log_fetch_failure($message) {
+	$state = ont_monitor_runtime_state();
+	$now = time();
+	$last_logged = (int)($state['fetch_error_logged_at'] ?? 0);
+	if (($state['fetch_error'] ?? null) !== $message || $now - $last_logged >= ONT_MONITOR_FETCH_ERROR_LOG_INTERVAL) {
+		ont_monitor_log('fetch failed: ' . $message, LOG_ERR);
+		$state['fetch_error_logged_at'] = $now;
+	}
+	$state['fetch_error'] = $message;
+	ont_monitor_save_runtime_state($state);
+}
+
+function ont_monitor_fetch_error($message) {
+	ont_monitor_log_fetch_failure($message);
+	return ['error' => $message];
+}
+
+function ont_monitor_log_status($data) {
+	$state = ont_monitor_runtime_state();
+	$changed = false;
+
+	if (!empty($state['fetch_error'])) {
+		ont_monitor_log('fetch recovered', LOG_NOTICE);
+		unset($state['fetch_error'], $state['fetch_error_logged_at']);
+		$changed = true;
+	}
+
+	$gpon_state = ont_monitor_value($data['gpon']['state']);
+	$gpon_label = ont_monitor_value($data['gpon']['state_label']);
+	$gpon_description = $gpon_state . ' ' . $gpon_label;
+	if (!array_key_exists('gpon_state', $state)) {
+		ont_monitor_log('GPON state: ' . $gpon_description);
+		$state['gpon_state'] = $gpon_state;
+		$state['gpon_label'] = $gpon_label;
+		$changed = true;
+	} elseif ($state['gpon_state'] !== $gpon_state || $state['gpon_label'] !== $gpon_label) {
+		ont_monitor_log('GPON state changed: ' . $state['gpon_state'] . ' ' . $state['gpon_label'] . ' -> ' . $gpon_description);
+		$state['gpon_state'] = $gpon_state;
+		$state['gpon_label'] = $gpon_label;
+		$changed = true;
+	}
+
+	$ethernet_status = ont_monitor_value($data['ethernet']['status']);
+	if (!array_key_exists('ethernet_status', $state)) {
+		ont_monitor_log('Ethernet link: ' . $ethernet_status);
+		$state['ethernet_status'] = $ethernet_status;
+		$changed = true;
+	} elseif ($state['ethernet_status'] !== $ethernet_status) {
+		ont_monitor_log('Ethernet link changed: ' . $state['ethernet_status'] . ' -> ' . $ethernet_status);
+		$state['ethernet_status'] = $ethernet_status;
+		$changed = true;
+	}
+
+	$rx_errors = ont_monitor_value($data['ethernet']['rx_errors']);
+	$tx_errors = ont_monitor_value($data['ethernet']['tx_errors']);
+	$errors_changed = !array_key_exists('rx_errors', $state) || $state['rx_errors'] !== $rx_errors || $state['tx_errors'] !== $tx_errors;
+	$has_errors = (is_numeric($rx_errors) && (int)$rx_errors > 0) || (is_numeric($tx_errors) && (int)$tx_errors > 0);
+	$had_errors = (is_numeric($state['rx_errors'] ?? null) && (int)$state['rx_errors'] > 0) || (is_numeric($state['tx_errors'] ?? null) && (int)$state['tx_errors'] > 0);
+	$last_error_log = (int)($state['errors_logged_at'] ?? 0);
+	if ($errors_changed && $has_errors && (!$had_errors || time() - $last_error_log >= ONT_MONITOR_ERROR_COUNTER_LOG_INTERVAL)) {
+		ont_monitor_log('Ethernet errors: RX ' . $rx_errors . ', TX ' . $tx_errors, LOG_WARNING);
+		$state['errors_logged_at'] = time();
+		$changed = true;
+	} elseif ($errors_changed && $had_errors && !$has_errors) {
+		ont_monitor_log('Ethernet errors cleared', LOG_NOTICE);
+		unset($state['errors_logged_at']);
+		$changed = true;
+	}
+	if ($errors_changed) {
+		$state['rx_errors'] = $rx_errors;
+		$state['tx_errors'] = $tx_errors;
+		$changed = true;
+	}
+
+	if ($changed) {
+		ont_monitor_save_runtime_state($state);
+	}
+}
+
 function ont_monitor_gpon_state($state) {
 	$states = [
 		'1' => ['code' => 'O1', 'label' => 'Initial state', 'severity' => 'warning'],
@@ -112,7 +221,7 @@ function ont_monitor_ethernet_status($link_up, $link_mode) {
 
 function ont_monitor_fetch() {
 	if (!function_exists('curl_init')) {
-		return ['error' => 'PHP cURL support is unavailable.'];
+		return ont_monitor_fetch_error('PHP cURL support is unavailable.');
 	}
 
 	$settings = ont_monitor_settings();
@@ -148,10 +257,10 @@ function ont_monitor_fetch() {
 	);
 
 	if ($login_error !== '') {
-		return ['error' => 'ONT login request failed: ' . $login_error];
+		return ont_monitor_fetch_error('ONT login request failed: ' . $login_error);
 	}
 	if ($login_status !== 200 || strpos((string)$login_body, 'loginStatus = ok') === false || $session_cookie === '') {
-		return ['error' => 'ONT login failed. Verify the source address and credentials.'];
+		return ont_monitor_fetch_error('ONT login failed. Verify the source address and credentials.');
 	}
 
 	$pages = [];
@@ -162,7 +271,7 @@ function ont_monitor_fetch() {
 			[CURLOPT_COOKIE => $session_cookie]
 		);
 		if ($error !== '' || $status !== 200 || $body === false) {
-			return ['error' => 'Unable to read ONT ' . $page . ' data.'];
+			return ont_monitor_fetch_error('Unable to read ONT ' . $page . ' data.');
 		}
 		$pages[$page] = $body;
 	}
@@ -183,7 +292,7 @@ function ont_monitor_fetch() {
 	$link_mode = ont_monitor_js_value($pages['userinfo'], 'mode');
 	$gpon = ont_monitor_gpon_state($gpon_state);
 
-	return [
+	$data = [
 		'updated' => date('c'),
 		'device' => [
 			'model' => ont_monitor_js_value($pages['devinfo'], 'Model'),
@@ -209,4 +318,6 @@ function ont_monitor_fetch() {
 			'tx_errors' => ont_monitor_js_value($pages['userinfo'], 'txErrs'),
 		],
 	];
+	ont_monitor_log_status($data);
+	return $data;
 }
